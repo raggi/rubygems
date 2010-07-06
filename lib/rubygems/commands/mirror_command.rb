@@ -2,6 +2,7 @@ require 'yaml'
 require 'zlib'
 
 require 'rubygems/command'
+require 'rubygems/remote_fetcher'
 require 'open-uri'
 
 class Gem::Commands::MirrorCommand < Gem::Command
