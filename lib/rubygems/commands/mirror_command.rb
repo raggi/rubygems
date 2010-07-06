@@ -84,20 +84,15 @@ Multiple sources and destinations may be specified.
         gem_file = gem.file_name
         gem_dest = File.join gems_dir, gem_file
 
-        unless File.exist? gem_dest then
-          begin
-            open "#{get_from}/gems/#{gem_file}", "rb" do |g|
-              contents = g.read
-              open gem_dest, "wb" do |out|
-                out.write contents
-              end
-            end
-          rescue
-            old_gf = gem_file
-            gem_file = gem_file.downcase
-            retry if old_gf != gem_file
-            alert_error $!
-          end
+        gem_src = "#{get_from}/gems/#{gem_file}"
+
+        begin
+          update_file(gem_src, gem_dest)
+        rescue
+          old_gf = gem_file
+          gem_file = gem_file.downcase
+          retry if old_gf != gem_file
+          alert_error $!
         end
 
         progress.updated gem_file
@@ -105,6 +100,16 @@ Multiple sources and destinations may be specified.
 
       progress.done
     end
+  end
+
+  def fetcher
+    Gem::RemoteFetcher.fetcher
+  end
+  
+  def update_file(src, dst)
+    last_modified = File.stat(dst).mtime rescue nil
+    result = fetcher.open_uri_or_path(src, last_modified)
+    open(dst, 'wb') { |f| f.write result } if result
   end
 
 end
