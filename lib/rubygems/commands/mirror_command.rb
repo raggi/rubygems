@@ -52,10 +52,6 @@ Multiple sources and destinations may be specified.
         Dir.mkdir gems_dir
       end
 
-      source_index_data = ''
-
-      say "fetching: #{get_from}/Marshal.#{Gem.marshal_version}.Z"
-
       get_from = URI.parse get_from
 
       if get_from.scheme.nil? then
@@ -70,14 +66,21 @@ Multiple sources and destinations may be specified.
                    end
       end
 
-      open File.join(get_from.to_s, "Marshal.#{Gem.marshal_version}.Z"), "rb" do |y|
-        source_index_data = Zlib::Inflate.inflate y.read
-        open File.join(save_to, "Marshal.#{Gem.marshal_version}"), "wb" do |out|
-          out.write source_index_data
+      marshal_file = "Marshal.#{Gem.marshal_version}"
+      marshal_path = File.join(save_to, marshal_file)
+      marshal_cmp = marshal_file + '.Z'
+      marshal_uri = "#{get_from}/#{marshal_cmp}"
+      marshal_dst = File.join(save_to, marshal_cmp)
+
+      say "fetching: #{marshal_uri}"
+
+      update_file marshal_uri, marshal_dst do
+        open marshal_path, "wb" do |out|
+          out.write Zlib::Inflate.inflate(File.read(marshal_dst))
         end
       end
 
-      source_index = Marshal.load source_index_data
+      source_index = Marshal.load File.read(marshal_path)
 
       progress = ui.progress_reporter source_index.size,
                                       "Fetching #{source_index.size} gems"
@@ -106,11 +109,15 @@ Multiple sources and destinations may be specified.
   def fetcher
     Gem::RemoteFetcher.fetcher
   end
-  
+
+  # Update src to dst if required, run the block iff action is taken.
   def update_file(src, dst)
     last_modified = File.stat(dst).mtime rescue nil
     result = fetcher.open_uri_or_path(src, last_modified)
-    open(dst, 'wb') { |f| f.write result } if result
+    if result
+      open(dst, 'wb') { |f| f.write result }
+      yield if block_given?
+    end
   end
 
 end
