@@ -118,6 +118,7 @@ class Gem::Indexer
 
     build_marshal_gemspecs
     build_modern_indicies if @build_modern
+    build_dependency_indices
 
     compress_indicies
   end
@@ -150,6 +151,64 @@ class Gem::Indexer
     end
 
     @files << @quick_marshal_dir
+
+    files
+  end
+
+  class DependencyIndex
+    def self.from_specs_by_name name
+      new Gem::Specification.find_all_by_name(name)
+    end
+
+    def initialize specs
+      @specs = specs
+    end
+
+    def to_index
+      @specs.map do |spec|
+        {
+          :name => spec.name,
+          :number => spec.version.to_s,
+          :platform => spec.platform,
+          :dependencies => spec.dependencies.map do |dep|
+            [dep.name, dep.requirement.to_s]
+          end
+        }
+      end
+    end
+  end
+
+  ##
+  ## Builds Marshal dependency index files, useful for resolvers.
+
+  def build_dependency_indices
+    # TODO build_indicies above is an incorrect spelling.
+    count = Gem::Specification.count
+    progress = ui.progress_reporter count,
+      "Generating Depednency index files for #{count} gems",
+      "Complete"
+
+    files = []
+
+    Gem.time 'Generated Dependency index files' do
+      # TODO group_by name?
+      Gem::Specification.group_by(&:name).each do |name|
+        dependency_file_name = "#{spec.name}.deps.rz"
+        depedency_name = File.join @dependency_index_dir, dependency_file_name
+
+        dependency_index = DependencyIndex.from_specs_by_name(name).to_index
+        dependency_zipped = Gem.deflate Marshal.dump(dependency_index)
+        open(dependency_name, 'wb') { |io| io.write dependency_zipped }
+
+        files << dependency_name
+
+        progress.updated name
+      end
+
+      progress.done
+    end
+
+    @files << @dependency_index_dir
 
     files
   end
@@ -328,6 +387,8 @@ class Gem::Indexer
     say "Moving index into production dir #{@dest_directory}" if verbose
 
     files = @files
+    files.compact!
+
     files.delete @quick_marshal_dir if files.include? @quick_dir
 
     if files.include? @quick_marshal_dir and not files.include? @quick_dir then
